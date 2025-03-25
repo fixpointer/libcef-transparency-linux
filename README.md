@@ -20,6 +20,11 @@ WMPotify on Linux without patch:
 
 The patch is only active if spotify is loaded with the library. To make it somewhat permanent, specify the environment variable in the `.desktop` file for spotify (most distros will come with an editor for this). This makes uninstallation easier - all that is necessary is to remove the environment variable, and the patch will not be applied anymore.
 
+For now, you will also need to adjust the settings in AeroThemePlasma to get proper blur behind the window:
+
+- In the settings for the "Aero Glass Blur" desktop effect, add the "spotify" window class (without quotes) to the list of windows to force blur
+- In the settings for the SMOD decoration, add an override for the "spotify" window class and disable drawing of inner borders
+
 ## Troubleshooting
 When you run spotify from the command line, the patch will print diagnostic messages (prefixed with `[aero_patcher]`. When all goes well, you should only see the `[aero_patcher] have successfully patched libcef` message appear (possibly multiple times, because the app will create multiple subprocesses). 
 Otherwise, there will be an error message describing what went wrong in the patching process. In this case, please create an issue with the log messages attached. If you get no message at all, the environment variable may not be set correctly.
