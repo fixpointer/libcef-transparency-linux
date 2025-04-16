@@ -8,7 +8,8 @@ proc_maps_parser/build/libpmparser.a: proc_maps_parser
 	cd proc_maps_parser && $(MAKE)
 
 patcher_lib.so: patcher_lib.c proc_maps_parser/build/libpmparser.a
-	gcc -masm=intel -Iproc_maps_parser/include -o patcher_lib.so -shared -fpic -z defs patcher_lib.c -lc -l:libpmparser.a -L./proc_maps_parser/build
+	# link against static libpmparser, build a shared library
+	gcc -Wall -masm=intel -Iproc_maps_parser/include -o patcher_lib.so -shared -fpic -z defs patcher_lib.c -lc -l:libpmparser.a -L./proc_maps_parser/build
 
 
 clean:

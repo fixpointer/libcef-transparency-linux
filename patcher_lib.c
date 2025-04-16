@@ -10,6 +10,9 @@
 #include <stdbool.h>
 #include <dlfcn.h>
 
+
+#define nitems(x) (sizeof(x)/sizeof((x)[0]))
+
 char** get_argv(void* stack_start, void* stack_end, int* argc_out) {
     void* cur = environ;
 
@@ -82,22 +85,62 @@ unsigned int la_version(unsigned int version) {
     //fprintf(stderr, "[aero_patcher]: have main text from %p to %p\n", main_text->addr_start, main_text->addr_end);
     void* search_start = main_text->addr_start;
 
+    // allowed values (with masks) for the 8 bytes before the match
+    // There may be some other instruction that contains the bytes 12 12 12 ff in its encoding, and when we patch those, we will crash
+    // Therefore, we try to match on the complete instruction that contains the immediate value, and check whether it matches one of the expected
+    // occurrences, either a move of the 32-bit immediate directly into a register, or a move into memory pointed to by a register with a small displacement
+    // (i.e. where the value is moved into a struct)
+    struct {
+        uint8_t* value;
+        uint8_t* mask;
+    } allowed_prefixes [] = {
+        {
+            .value = (uint8_t*)"\x00\x00\xc7\x80\x00\x00\x00\x00",
+
+            // force match on opcode (c7), and mode / op parts of modrm byte, and lower 12 bits of address
+            // this should still catch the mov if the register or struct offset changes slightly, but avoid matching anything entirely different
+            .mask  = (uint8_t*)"\x00\x00\xff\xf8\x00\xf0\xff\xff"
+        },
+        {
+            .value = (uint8_t*) "\x00\x00\x00\x00\x00\x00\x00\xb8",
+            // match mov <register>, <32 bit immediate> for any register
+            .mask = (uint8_t*)"\x00\x00\x00\x00\x00\x00\x00\xf8"
+        }
+    };
+
     while(true) {
         void* result = memmem(search_start, (uintptr_t) main_text->addr_end - (uintptr_t) search_start, "\x12\x12\x12\xff", 4);
 
         if (!result) break;
 
-        if (mprotect((void*)((uintptr_t)result & ~0xfffULL), ((uintptr_t) result & 0xfff > 0x1000-4) ? 0x2000: 0x1000, PROT_WRITE | PROT_READ) == -1) {
-            perror("[aero_patcher]: mprotect failure\n");
-            goto free_pm_and_return;
+        bool prefix_valid = false;
+
+
+
+        // check for match with one of the allowed prefixes
+        for (int i = 0; i < nitems(allowed_prefixes) && !prefix_valid; i++) {
+            uint64_t tmp = *(uint64_t*) (result-8);
+            tmp &= *(uint64_t*)allowed_prefixes[i].mask;
+
+            if (tmp == *(uint64_t*) allowed_prefixes[i].value) prefix_valid = true;
+
+        }
+        if (prefix_valid) {
+            if (mprotect((void*)((uintptr_t)result & ~0xfffULL), ((uintptr_t) result & 0xfff) > 0x1000-4 ? 0x2000: 0x1000, PROT_WRITE | PROT_READ) == -1) {
+                perror("[aero_patcher]: mprotect failure\n");
+                goto free_pm_and_return;
+            }
+
+            fprintf(stderr, "[aero_patcher] found color patch pattern 121212ff @ %p\n", result);
+            memcpy(result,"\x00\x00\x00\x00", 4);
+
+            if (mprotect((void*)((uintptr_t)result & ~0xfffULL), ((uintptr_t) result & 0xfff) > 0x1000-4 ? 0x2000: 0x1000, PROT_EXEC | PROT_READ) == -1) {
+                perror("[aero_patcher]: mprotect failure\n");
+                goto free_pm_and_return;
+            }
         }
 
-        memcpy(result,"\x00\x00\x00\x00", 4);
 
-        if (mprotect((void*)((uintptr_t)result & ~0xfffULL), ((uintptr_t) result & 0xfff > 0x1000-4) ? 0x2000: 0x1000, PROT_EXEC | PROT_READ) == -1) {
-            perror("[aero_patcher]: mprotect failure\n");
-            goto free_pm_and_return;
-        }
 
 
         //fprintf(stderr, "[aero_patcher] successfully patched text offset 0x%lx\n", (uintptr_t) result - (uintptr_t)(main_text->addr_start));
@@ -215,7 +258,7 @@ unsigned int la_objopen(struct link_map* map, Lmid_t lmid, uintptr_t *cookie) {
 
     if (mprotect(
             (void*)((uintptr_t)patch_destination & ~0xfffULL),
-            ((uintptr_t)patch_destination & 0xfff > 0x1000-4) ? 0x2000: 0x1000,
+            ((uintptr_t)patch_destination & 0xfff) > 0x1000-4 ? 0x2000: 0x1000,
             PROT_WRITE | PROT_READ)
         == -1) {
         perror("[aero_patcher]: mprotect failure");
@@ -226,6 +269,8 @@ unsigned int la_objopen(struct link_map* map, Lmid_t lmid, uintptr_t *cookie) {
     size_t patch_pattern_len = (uintptr_t) patch_pattern_end - (uintptr_t) patch_pattern_start;
 
 
+    fprintf(stderr, "[aero_patcher] found x11 transparency flag handling code @ %p. will apply patch of length %ld\n", patch_destination, patch_pattern_len);
+
 
     memset(patch_destination, '\x90', patch_pattern_len);
     memcpy(patch_destination,(void*)patch_start, patch_len);
@@ -234,7 +279,7 @@ unsigned int la_objopen(struct link_map* map, Lmid_t lmid, uintptr_t *cookie) {
 
     if (mprotect(
             (void*)((uintptr_t)patch_destination & ~0xfffULL),
-            ((uintptr_t)patch_destination & 0xfff > 0x1000-4) ? 0x2000: 0x1000,
+            ((uintptr_t)patch_destination & 0xfff) > 0x1000-4 ? 0x2000: 0x1000,
             PROT_EXEC | PROT_READ)
         == -1) {
         perror("[aero_patcher]: mprotect failure");
