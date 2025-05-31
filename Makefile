@@ -15,3 +15,6 @@ patcher_lib.so: patcher_lib.c proc_maps_parser/build/libpmparser.a
 clean:
 	rm patcher_lib.so || true
 	rm -rf proc_maps_parser || true
+
+install:
+	cp patcher_lib.so /usr/share/spotify

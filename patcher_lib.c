@@ -205,11 +205,15 @@ unsigned int la_objopen(struct link_map* map, Lmid_t lmid, uintptr_t *cookie) {
 
     procmaps_struct *mem_region;
     procmaps_struct *libcef_text = NULL;
+    procmaps_struct *libcef_base = NULL;
 
     while ((mem_region = pmparser_next(&maps)) != NULL) {
-        if (!strcmp(mem_region->pathname, map->l_name) && mem_region->is_x) {
-            libcef_text = mem_region;
-            break;
+        if (!strcmp(mem_region->pathname, map->l_name)) {
+            if (!libcef_base) libcef_base = mem_region;
+            if (mem_region->is_x) {
+                libcef_text = mem_region;
+                break;
+            }
         }
     }
 
@@ -269,7 +273,7 @@ unsigned int la_objopen(struct link_map* map, Lmid_t lmid, uintptr_t *cookie) {
     size_t patch_pattern_len = (uintptr_t) patch_pattern_end - (uintptr_t) patch_pattern_start;
 
 
-    fprintf(stderr, "[aero_patcher] found x11 transparency flag handling code @ %p. will apply patch of length %ld\n", patch_destination, patch_pattern_len);
+    fprintf(stderr, "[aero_patcher] found x11 transparency flag handling code @ %p (offset %lx). will apply patch of length %ld\n", patch_destination, patch_destination - libcef_base->addr_start, patch_pattern_len);
 
 
     memset(patch_destination, '\x90', patch_pattern_len);
