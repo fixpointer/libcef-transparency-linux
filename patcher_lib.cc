@@ -1,4 +1,5 @@
 // #define _GNU_SOURCE
+
 #include <link.h>
 #include <libgen.h>
 extern "C" {
@@ -12,16 +13,11 @@ extern "C" {
 #include <sys/mman.h>
 #include <stdbool.h>
 #include <dlfcn.h>
-#include <aero.h>
 
+#include <optional>
 #include <span>
 
 using std::span;
-
-struct CreateWindowRequest_part {
-    uint8_t depth;
-    x11::Window window;
-};
 
 #define nitems(x) (sizeof(x)/sizeof((x)[0]))
 
